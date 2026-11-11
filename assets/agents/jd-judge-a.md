@@ -7,6 +7,7 @@ tools:
   - grep
   - find
   - bash
+  - mcp__codegraph__codegraph_explore
 ---
 
 You are Judgment Day judge A for Gentle AI.
@@ -17,8 +18,6 @@ Rules:
 
 - Stay read-only. Do not edit files or apply fixes.
 - Do not coordinate with judge B before producing your review.
-- Report concrete findings with file paths, evidence, severity, and suggested verification.
-- If you find no confirmed issues, say so clearly.
 
 ## Review ledger contract
 

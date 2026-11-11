@@ -1371,6 +1371,13 @@ test("models screen render does not auto-apply the Gentle theme and sanitizes ag
 	assert.doesNotMatch(plain, /\[31m/);
 });
 
+test("unconfigured review lenses show a missing model rather than inherited routing", () => {
+	const plain = __testing.routingTablePanel({}, ["openai/gpt-5.5"], ["review-risk", "review-refuter", "worker"], 100, undefined, 40).map(stripAnsi).join("\n");
+	assert.match(plain, /review-risk\s+not configured\s+off/);
+	assert.match(plain, /worker\s+inherit\s+inherit/);
+	assert.match(plain, /review-refuter\s+Pi default/);
+});
+
 test("models screen fills the terminal height and keeps every line inside the frame", () => {
 	const lines = renderScreen([], [], [], { width: 72, rows: 40 });
 	assert.equal(lines.length, 40);
@@ -1561,7 +1568,7 @@ test("models screen lists configuration problems under the profile name without 
 	assert.ok(!plain.some((line) => line.includes("…")));
 });
 
-test("delivery commands bypass RDD under every mode outcome while command safety remains independent", async () => {
+test("#2997: due-review workflow preflight precedes delivery while commits and ordinary command safety remain independent", async () => {
 	type ToolCallHandler = (
 		event: { toolName: string; input: unknown },
 		ctx: ExtensionContext,
@@ -1604,7 +1611,12 @@ test("delivery commands bypass RDD under every mode outcome while command safety
 
 		for (const command of commands) {
 			const result = await toolCall!({ toolName: "bash", input: { command } }, ctx);
-			assert.equal(result, undefined, `${mode.label}: ${command}`);
+			const deliveryCommands: readonly string[] = [commands[1], commands[2], commands[5], commands[6]];
+			const delivery = deliveryCommands.includes(command);
+			if (delivery && (mode.label === "RDD on" || mode.label === "mode failure")) {
+				assert.equal(result?.block, true, `${mode.label}: ${command}`);
+				assert.match(result?.reason ?? "", /RDD pre-delivery/);
+			} else assert.equal(result, undefined, `${mode.label}: ${command}`);
 		}
 	}
 });

@@ -358,10 +358,10 @@ test("general STATUS returns the typed native-status-unsupported boundary withou
 		outcome: "native-status-unsupported",
 		mutation_performed: false,
 		inventory_complete: false,
-		next_action: "require-upstream-read-only-native-status-inventory",
+		next_action: "check-native-provider-capabilities",
 		remediation_command: "gentle-ai review status --cwd <repo> --contract gentle-ai.review-integration/v2 --agent pi --next-transition",
 		evidence: {
-			native_contract: "gentle-ai/2.1.4",
+			expected_contract: "gentle-ai.review-integration/v2",
 			general_status: "unsupported",
 			claimant_inventory: "unsupported",
 		},
@@ -487,7 +487,8 @@ test("shipped controller fails closed while static prompts defer RDD lifecycle o
 	assert.match(toolContract, /ambiguous START output.*target-scoped native status.*declared action.*ambiguous gentle_review_capture.*never replays/is);
 	assert.doesNotMatch(toolContract, /START throws.*lineage does not exist/is);
 
-	const boundary = "This package injects the mirrored provider-bundle review execution contract into this session's system prompt at start; Gentle AI writes nothing into the Pi system prompt, and this package owns everything else here. Absent that mirrored contract, this package invents no lifecycle instructions.";
+	// cost-speed-painpoints S15 P5a (verdict X1): the contract is injected only while RDD is not off.
+	const boundary = "While RDD is not off, this package injects the mirrored provider-bundle review execution contract; Gentle AI writes nothing into this prompt. Absent that mirrored contract, this package invents no lifecycle instructions.";
 	const core = readFileSync("assets/orchestrator.md", "utf8");
 	assert.match(core, new RegExp(boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 

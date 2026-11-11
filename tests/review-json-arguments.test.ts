@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -87,6 +88,19 @@ test("public Anthropic non-strict adapter preserves the complete review tool dec
 });
 
 const binding = { name: "reviewer_result", arguments: [] };
+
+test("STATUS accepts object selectors and rejects malformed input before native access", async () => {
+ const input = { baseRef: "HEAD", committedOnly: true };
+ assert.equal(__testing.parseReviewControllerParameters(validate("gentle_review", { operation: "status", input })).input, JSON.stringify(input));
+ let calls = 0;
+ const native = new Proxy({}, { get: () => async () => { calls++; throw new Error("invalid input reached native"); } }) as NativeReviewCli;
+ for (const malformed of [null, [], 42]) await assert.rejects(__testing.executeReviewControllerOperation({ operation: "status", input: malformed }, process.cwd(), native), /input|JSON|object/i);
+ for (const malformed of [{ baseRef: "HEAD" }, { baseRef: "HEAD", committedOnly: false }, { unexpected: true }]) {
+  const result = await __testing.executeReviewControllerOperation({ operation: "status", input: malformed }, process.cwd(), native);
+  assert.equal(result.outcome, "native-status-input-invalid");
+ }
+ assert.equal(calls, 0);
+});
 test("registered review schemas admit START/ASSESS objects and ordered capture objects", () => {
 	for (const operation of ["start", "assess"]) {
 		const input = operation === "start" ? { mode: "ordinary" } : { committedOnly: true, baseRef: "HEAD" };
@@ -141,12 +155,13 @@ test("validated abandon objects reach the mocked native facade and still fail cl
 
 test("validated ASSESS objects reach the mocked native facade with parsed fields", async () => {
 	const requests: unknown[] = [];
+	const baseRef = execFileSync("git", ["rev-parse", "HEAD"], { cwd: process.cwd(), encoding: "utf8" }).trim();
 	const native = { assess: async (request: unknown) => { requests.push(request); throw new Error("mock assessment unavailable"); } } as unknown as NativeReviewCli;
 	for (const input of [{ baseRef: "HEAD", committedOnly: true, nativeReviewOutcome: "unknown" }, ' { "baseRef": "HEAD", "committedOnly": true, "nativeReviewOutcome": "unknown" } ']) {
 		await __testing.executeReviewControllerOperation(validate("gentle_review", { operation: "assess", input }), process.cwd(), native);
 	}
 	assert.equal(requests.length, 2);
-	assert.deepEqual(requests[0], { cwd: process.cwd(), baseRef: "HEAD", committedOnly: true });
+	assert.deepEqual(requests[0], { cwd: process.cwd(), baseRef, committedOnly: true });
 	assert.deepEqual(requests[1], requests[0]);
 });
 
@@ -191,7 +206,7 @@ test("validation and facade keep arrays, primitives and null fail-closed", async
 });
 
 test("all other controller operations keep object input fail-closed at the facade boundary (#1698)", async () => {
-	const operations = (tools.get("gentle_review").parameters.properties.operation.enum as string[]).filter((operation) => operation !== "start" && operation !== "assess" && operation !== "answer-consent" && operation !== "abandon" && operation !== "select-intended-untracked");
+	const operations = (tools.get("gentle_review").parameters.properties.operation.enum as string[]).filter((operation) => operation !== "start" && operation !== "assess" && operation !== "answer-consent" && operation !== "abandon" && operation !== "status" && operation !== "select-intended-untracked");
 	let calls = 0;
 	const native = new Proxy({}, { get() { return async () => { calls++; throw new Error("unexpected native execution"); }; } }) as NativeReviewCli;
 	for (const operation of operations) {
